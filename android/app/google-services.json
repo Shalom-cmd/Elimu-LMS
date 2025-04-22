@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "623453326249",
+    "project_id": "elimu-cbd1d",
+    "storage_bucket": "elimu-cbd1d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:623453326249:android:f2f6153d3f1710980212b8",
+        "android_client_info": {
+          "package_name": "com.example.elimu"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCLoSm70ezITW0QMIqTctTKOQfmSpvYX4s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
