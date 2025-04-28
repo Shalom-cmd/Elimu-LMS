@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:intl/intl.dart'; 
-//remove unnecessary fields eg start date, end date
+import 'package:intl/intl.dart';
+
 class SchoolRegistrationPage extends StatefulWidget {
   const SchoolRegistrationPage({Key? key}) : super(key: key);
 
@@ -12,7 +12,7 @@ class SchoolRegistrationPage extends StatefulWidget {
 class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
   final TextEditingController schoolNameController = TextEditingController();
   final TextEditingController schoolDomainController = TextEditingController();
-  final TextEditingController schoolTypeController = TextEditingController(); 
+  final TextEditingController schoolTypeController = TextEditingController();
   final TextEditingController cityController = TextEditingController();
   final TextEditingController stateController = TextEditingController();
   final TextEditingController countryController = TextEditingController();
@@ -26,9 +26,7 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
   final TextEditingController schoolDescriptionController = TextEditingController();
   final TextEditingController logoController = TextEditingController();
 
-  // Register the school in Firestore
   Future<void> registerSchool() async {
-    // Input Validation
     if (schoolNameController.text.trim().isEmpty ||
         schoolDomainController.text.trim().isEmpty ||
         schoolTypeController.text.trim().isEmpty ||
@@ -46,28 +44,24 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
       return;
     }
 
-    // Email validation
     if (!RegExp(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").hasMatch(emailAddressController.text.trim())) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please enter a valid email address')));
       return;
     }
 
-    // Phone number validation (basic check)
     if (!RegExp(r'^[0-9]{10}$').hasMatch(phoneNumberController.text.trim())) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please enter a valid 10-digit phone number')));
       return;
     }
 
-    // Date validation (simple format check)
     try {
       DateFormat('yyyy-MM-dd').parse(startDateController.text.trim());
       DateFormat('yyyy-MM-dd').parse(endDateController.text.trim());
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Please enter valid start and end dates (yyyy-MM-dd)')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Enter valid start/end dates (yyyy-MM-dd)')));
       return;
     }
 
-    // Check if the school domain already exists
     final schoolDomain = schoolDomainController.text.trim();
     final existingSchool = await FirebaseFirestore.instance.collection('schools').doc(schoolDomain).get();
     if (existingSchool.exists) {
@@ -76,7 +70,6 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
     }
 
     try {
-      // Register the school document in Firestore using the unique school domain
       await FirebaseFirestore.instance.collection('schools').doc(schoolDomain).set({
         'schoolName': schoolNameController.text.trim(),
         'schoolDomain': schoolDomain,
@@ -98,18 +91,13 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
           'endDate': endDateController.text.trim(),
         },
         'schoolDescription': schoolDescriptionController.text.trim(),
-        'logo': logoController.text.trim(), // If logo is uploaded
+        'logo': logoController.text.trim(),
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // Show success message
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('School Registered Successfully!')));
-
-      // After registration, navigate back to the previous screen
-      Navigator.pop(context); // Or Navigator.pushReplacement(...) to navigate to another page
-
+      Navigator.pop(context);
     } catch (e) {
-      // Handle errors
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
@@ -118,109 +106,35 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text("Register School")),
-      body: Padding(
-        padding: EdgeInsets.all(30),
+      body: SafeArea(
         child: ListView(
+          padding: EdgeInsets.all(30),
           children: [
-            // School Name input
-            TextField(
-              controller: schoolNameController,
-              decoration: InputDecoration(labelText: "School Name"),
-            ),
-            SizedBox(height: 20),
+            _buildTextField("School Name", schoolNameController),
+            _buildTextField("School Domain/ID", schoolDomainController),
+            _buildTextField("School Type (Public/Private)", schoolTypeController),
 
-            // School Domain input (e.g., chicoelementary.edu)
-            TextField(
-              controller: schoolDomainController,
-              decoration: InputDecoration(labelText: "School Domain/ID"),
-            ),
-            SizedBox(height: 20),
+            _buildSectionHeader("Location"),
+            _buildTextField("City", cityController),
+            _buildTextField("State", stateController),
+            _buildTextField("Country", countryController),
 
-            // School Type input (Public or Private)
-            TextField(
-              controller: schoolTypeController,
-              decoration: InputDecoration(labelText: "School Type (Public/Private)"),
-            ),
-            SizedBox(height: 20),
+            _buildSectionHeader("Contact Information"),
+            _buildTextField("Phone Number", phoneNumberController),
+            _buildTextField("Email Address", emailAddressController),
+            _buildTextField("Website URL", websiteController),
 
-            // Location inputs
-            Text("Location", style: TextStyle(fontWeight: FontWeight.bold)),
-            TextField(
-              controller: cityController,
-              decoration: InputDecoration(labelText: "City"),
-            ),
-            SizedBox(height: 10),
-            TextField(
-              controller: stateController,
-              decoration: InputDecoration(labelText: "State"),
-            ),
-            SizedBox(height: 10),
-            TextField(
-              controller: countryController,
-              decoration: InputDecoration(labelText: "Country"),
-            ),
-            SizedBox(height: 20),
+            _buildTextField("Grades Offered (e.g., K-5, 6-8, 9-12)", gradesOfferedController),
+            _buildTextField("School Administrator Name", adminNameController),
 
-            // Contact Information
-            Text("Contact Information", style: TextStyle(fontWeight: FontWeight.bold)),
-            TextField(
-              controller: phoneNumberController,
-              decoration: InputDecoration(labelText: "Phone Number"),
-            ),
-            SizedBox(height: 10),
-            TextField(
-              controller: emailAddressController,
-              decoration: InputDecoration(labelText: "Email Address"),
-            ),
-            SizedBox(height: 10),
-            TextField(
-              controller: websiteController,
-              decoration: InputDecoration(labelText: "Website URL"),
-            ),
-            SizedBox(height: 20),
+            _buildSectionHeader("Academic Calendar"),
+            _buildTextField("Start Date (yyyy-MM-dd)", startDateController),
+            _buildTextField("End Date (yyyy-MM-dd)", endDateController),
 
-            // Grades Offered
-            TextField(
-              controller: gradesOfferedController,
-              decoration: InputDecoration(labelText: "Grades Offered (e.g., K-5, 6-8, 9-12)"),
-            ),
-            SizedBox(height: 20),
+            _buildTextField("School Description", schoolDescriptionController),
+            _buildTextField("School Logo (Optional)", logoController),
 
-            // School Administrator Name
-            TextField(
-              controller: adminNameController,
-              decoration: InputDecoration(labelText: "School Administrator Name"),
-            ),
             SizedBox(height: 20),
-
-            // Academic Calendar
-            Text("Academic Calendar", style: TextStyle(fontWeight: FontWeight.bold)),
-            TextField(
-              controller: startDateController,
-              decoration: InputDecoration(labelText: "Start Date (yyyy-MM-dd)"),
-            ),
-            SizedBox(height: 10),
-            TextField(
-              controller: endDateController,
-              decoration: InputDecoration(labelText: "End Date (yyyy-MM-dd)"),
-            ),
-            SizedBox(height: 20),
-
-            // School Description
-            TextField(
-              controller: schoolDescriptionController,
-              decoration: InputDecoration(labelText: "School Description"),
-            ),
-            SizedBox(height: 20),
-
-            // School Logo (Optional, can upload)
-            TextField(
-              controller: logoController,
-              decoration: InputDecoration(labelText: "School Logo (Optional)"),
-            ),
-            SizedBox(height: 20),
-
-            // Register Button
             ElevatedButton(
               onPressed: registerSchool,
               child: Text("Register School"),
@@ -229,8 +143,29 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
                 textStyle: TextStyle(fontSize: 18),
               ),
             ),
+            SizedBox(height: 50),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(String label, TextEditingController controller) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: TextField(
+        controller: controller,
+        decoration: InputDecoration(labelText: label),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 5),
+      child: Text(
+        title,
+        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
       ),
     );
   }

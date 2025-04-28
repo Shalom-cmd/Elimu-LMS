@@ -1,0 +1,2 @@
+C:/Users/smwiti/Documents/elimu-mobile/android/app/.cxx/Debug/1v3w6e6j/armeabi-v7a/CMakeFiles/edit_cache.dir
+C:/Users/smwiti/Documents/elimu-mobile/android/app/.cxx/Debug/1v3w6e6j/armeabi-v7a/CMakeFiles/rebuild_cache.dir

@@ -1,5 +1,5 @@
-import 'dart:html' as html;
-
+import 'dart:io'; 
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -77,8 +77,16 @@ class _ViewQuizzesPageState extends State<ViewQuizzesPage> {
     return DateFormat('MMMM dd, yyyy – hh:mm a').format(timestamp.toDate());
   }
 
-  void openFileInNewTab(String url) {
-    html.window.open(url, "_blank");
+
+  Future<void> openFileInNewTab(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open file.')),
+      );
+    }
   }
 
   void openEditScreen(DocumentSnapshot quiz) {

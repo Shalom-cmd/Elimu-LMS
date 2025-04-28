@@ -25,7 +25,6 @@ class _LoginStudentPageState extends State<LoginStudentPage> {
     });
 
     try {
-      // Search all schools for the student by username
       final schools = await FirebaseFirestore.instance.collection('schools').get();
       DocumentSnapshot? studentDoc;
 
@@ -51,7 +50,6 @@ class _LoginStudentPageState extends State<LoginStudentPage> {
         return;
       }
 
-      // Try login with parent's email
       AuthService authService = AuthService();
       var user = await authService.loginUser(foundParentEmail!, passwordController.text.trim());
 
@@ -92,7 +90,6 @@ class _LoginStudentPageState extends State<LoginStudentPage> {
     }
 
     try {
-      // Reuse the logic to find parent email
       final schools = await FirebaseFirestore.instance.collection('schools').get();
       String? parentEmail;
 

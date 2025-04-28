@@ -2,30 +2,44 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/landing_page.dart';
-import 'package:google_sign_in/google_sign_in.dart';
+import 'package:hive_flutter/hive_flutter.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'screens/student/dashboard_student.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
+  // Initialize Hive
+  final dir = await getApplicationDocumentsDirectory();
+  await Hive.initFlutter(dir.path);
+  await Hive.openBox('assignmentsBox');
+  await Hive.openBox('quizzesBox');
+  await Hive.openBox('resourcesBox');
+  await Hive.openBox('profileBox');
+
   // Initialize Firebase
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
-  // Ensure GoogleSignIn is configured for both Android and Web
-  GoogleSignIn().isSignedIn().then((isSignedIn) {
-    if (isSignedIn) {
-      print("User is already signed in");
-    } else {
-      print("User is not signed in");
-    }
-  });
+  // Check if user is logged in or has a cached profile
+  final user = FirebaseAuth.instance.currentUser;
+  final profileBox = Hive.box('profileBox');
+  final cachedProfile = profileBox.get('studentProfile');
 
-  runApp(MyApp());
+  final Widget startPage = user != null
+      ? StudentDashboard()
+      : (cachedProfile != null
+          ? StudentDashboard()
+          : LandingPage());
+
+  runApp(MyApp(startPage: startPage));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({Key? key}) : super(key: key);
+  final Widget startPage;
+  const MyApp({Key? key, required this.startPage}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -46,8 +60,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: LandingPage(), // Make sure LandingPage handles Google Sign-In as needed
+      home: startPage,
     );
   }
 }
-

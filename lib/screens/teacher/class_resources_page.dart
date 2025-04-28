@@ -1,9 +1,13 @@
-import 'dart:html' as html;
+import 'dart:io'; 
+import 'package:url_launcher/url_launcher.dart';
+import 'package:file_picker/file_picker.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../pdf_viewer_page.dart'; 
+
 
 class ClassResourcesPage extends StatefulWidget {
   const ClassResourcesPage({Key? key}) : super(key: key);
@@ -62,28 +66,44 @@ class _ClassResourcesPageState extends State<ClassResourcesPage> with SingleTick
           schoolDomain = school.id;
           grade = doc['gradeLevel'];
         });
-        fetchResources(); // Load resources after we get domain/grade
+        fetchResources(); 
         break;
       }
     }
   }
+  Future<void> pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx'],
+      withData: true,
+    );
 
-  void pickFile() {
-    final uploadInput = html.FileUploadInputElement()..accept = '.pdf,.doc,.docx';
-    uploadInput.click();
-
-    uploadInput.onChange.listen((e) {
-      final file = uploadInput.files?.first;
-      final reader = html.FileReader();
-
-      reader.readAsArrayBuffer(file!);
-      reader.onLoadEnd.listen((event) {
-        setState(() {
-          fileName = file.name;
-          fileBytes = reader.result as Uint8List;
-        });
+    if (result != null && result.files.single.bytes != null) {
+      setState(() {
+        fileBytes = result.files.single.bytes!;
+        fileName = result.files.single.name;
       });
-    });
+    }
+  }
+
+  Future<String> uploadFileToFirebase() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final storageRef = FirebaseStorage.instance
+        .ref('resources/${user!.uid}/${DateTime.now().millisecondsSinceEpoch}_$fileName');
+
+    final uploadTask = await storageRef.putData(fileBytes!);
+    return await uploadTask.ref.getDownloadURL();
+  }
+
+  Future<void> openFile(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open link.')),
+      );
+    }
   }
 
   Future<void> uploadResource() async {
@@ -92,14 +112,15 @@ class _ClassResourcesPageState extends State<ClassResourcesPage> with SingleTick
       return;
     }
 
-    String? fileUrl;
+    String? uploadedFileUrl;
 
     if (fileBytes != null && fileName != null) {
-      final ref = FirebaseStorage.instance
-          .ref('resources/${FirebaseAuth.instance.currentUser!.uid}/${DateTime.now().millisecondsSinceEpoch}_$fileName');
-
-      await ref.putData(fileBytes!);
-      fileUrl = await ref.getDownloadURL();
+      try {
+        uploadedFileUrl = await uploadFileToFirebase();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ File upload failed: $e")));
+        return; 
+      }
     }
 
     final data = {
@@ -107,7 +128,7 @@ class _ClassResourcesPageState extends State<ClassResourcesPage> with SingleTick
       'title': _titleController.text.trim(),
       'description': _descriptionController.text.trim(),
       'link': _linkController.text.trim(),
-      'fileUrl': fileUrl,
+      'fileUrl': uploadedFileUrl, // use uploaded file URL
       'createdAt': FieldValue.serverTimestamp(),
     };
 
@@ -129,6 +150,7 @@ class _ClassResourcesPageState extends State<ClassResourcesPage> with SingleTick
 
     fetchResources();
   }
+
 
   void fetchResources() async {
     if (schoolDomain.isEmpty || grade.isEmpty) return;
@@ -240,13 +262,13 @@ class _ClassResourcesPageState extends State<ClassResourcesPage> with SingleTick
                         TextButton.icon(
                           icon: Icon(Icons.link),
                           label: Text("Open Link"),
-                          onPressed: () => html.window.open(res['link'], '_blank'),
+                          onPressed: () => openFile(res['link'])
                         ),
                       if ((res['fileUrl'] ?? "").isNotEmpty)
                         TextButton.icon(
                           icon: Icon(Icons.picture_as_pdf),
                           label: Text("Open File"),
-                          onPressed: () => html.window.open(res['fileUrl'], '_blank'),
+                          onPressed: () => openFile(res['fileUrl'])
                         ),
                     ],
                   ),

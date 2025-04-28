@@ -1,4 +1,4 @@
-import 'dart:html' as html;
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -26,7 +26,16 @@ class _GradingPageState extends State<GradingPage> {
     super.initState();
     fetchTeacherInfo();
   }
-
+  Future<void> openFile(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open file.')),
+      );
+    }
+  }
   Future<void> fetchTeacherInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     final schools = await FirebaseFirestore.instance.collection('schools').get();
@@ -194,18 +203,20 @@ class _GradingPageState extends State<GradingPage> {
 
     final controller = TextEditingController(text: gradeValue);
 
-    
-    final quizDoc = quizzes.firstWhere((doc) => doc.id == selectedDocId);
-    final quizData = quizDoc.data() as Map<String, dynamic>;
-    final List questions = quizData['questions'] ?? [];
-    final isAssignment = gradingAssignments;
-    final text = isAssignment
-        ? data['textAnswer'] ?? ''
-        : List.generate(questions.length, (i) {
-          final q = questions[i]['question'] ?? 'Untitled';
-          final answer = data['answers']?[i.toString()] ?? 'No answer';
-          return "Q${i + 1}: $q\n📝 Answer: $answer";
-        }).join('\n\n');
+    final String text;
+    if (gradingAssignments) {
+      text = data['textAnswer'] ?? '';
+    } else {
+      final quizDoc = quizzes.firstWhere((doc) => doc.id == selectedDocId);
+      final quizData = quizDoc.data() as Map<String, dynamic>;
+      final List questions = quizData['questions'] ?? [];
+      text = List.generate(questions.length, (i) {
+        final q = questions[i]['question'] ?? 'Untitled';
+        final answer = data['answers']?[i.toString()] ?? 'No answer';
+        return "Q${i + 1}: $q\n📝 Answer: $answer";
+      }).join('\n\n');
+    }
+
 
     return Card(
       margin: EdgeInsets.symmetric(vertical: 8),
@@ -222,7 +233,7 @@ class _GradingPageState extends State<GradingPage> {
               ),
             if (fileUrl != null)
               TextButton.icon(
-                onPressed: () => html.window.open(fileUrl, "_blank"),
+                onPressed: () => openFile(fileUrl),
                 icon: Icon(Icons.open_in_new),
                 label: Text("Open File"),
               ),

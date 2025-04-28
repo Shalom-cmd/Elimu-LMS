@@ -1,5 +1,6 @@
-import 'dart:html' as html;
 import 'dart:typed_data';
+import 'dart:io'; 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -93,24 +94,20 @@ class _CreateAssignmentPageState extends State<CreateAssignmentPage> {
     }
   }
 
-  void pickFileWeb() {
-    final uploadInput = html.FileUploadInputElement()..accept = '.pdf,.doc,.docx';
-    uploadInput.click();
+  Future<void> pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx'],
+      withData: true,
+    );
 
-    uploadInput.onChange.listen((event) {
-      final file = uploadInput.files?.first;
-      final reader = html.FileReader();
-
-      reader.readAsArrayBuffer(file!);
-      reader.onLoadEnd.listen((e) {
-        setState(() {
-          fileName = file.name;
-          fileBytes = reader.result as Uint8List;
-        });
+    if (result != null && result.files.single.bytes != null) {
+      setState(() {
+        fileBytes = result.files.single.bytes!;
+        fileName = result.files.single.name;
       });
-    });
+    }
   }
-
 
   Future<String> uploadFileToFirebase() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -271,11 +268,11 @@ class _CreateAssignmentPageState extends State<CreateAssignmentPage> {
               ),
 
             const SizedBox(height: 24),
-            if (!createInApp && kIsWeb) ...[
+            if (!createInApp) ...[
               Text("📎 Or Pick an Assignment File", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
               const SizedBox(height: 10),
               ElevatedButton.icon(
-                onPressed: pickFileWeb,
+                onPressed: pickFile,
                 icon: Icon(Icons.upload_file),
                 label: Text("Pick File"),
               ),

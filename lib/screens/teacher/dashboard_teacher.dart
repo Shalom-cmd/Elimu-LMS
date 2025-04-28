@@ -8,6 +8,7 @@ import 'view_quizzes_page.dart';
 import 'class_resources_page.dart';
 import 'grading_page.dart';
 import '../../messaging/messaging_screen.dart';
+import '../landing_page.dart';
 
 class TeacherDashboard extends StatefulWidget {
   const TeacherDashboard({Key? key}) : super(key: key);
@@ -27,7 +28,14 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
     super.initState();
     fetchTeacherInfo();
   }
-
+  void logout(BuildContext context) async {
+    await FirebaseAuth.instance.signOut();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LandingPage()),
+      (route) => false,
+    );
+  }
   Future<void> fetchTeacherInfo() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
@@ -167,10 +175,7 @@ class _TeacherDashboardState extends State<TeacherDashboard> {
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text("Logout"),
-              onTap: () {
-                FirebaseAuth.instance.signOut();
-                Navigator.pop(context);
-              },
+              onTap: () => logout(context),
             ),
           ],
         ),

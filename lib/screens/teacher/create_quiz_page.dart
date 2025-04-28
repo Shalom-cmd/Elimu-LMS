@@ -1,11 +1,11 @@
-import 'dart:html' as html;
 import 'dart:typed_data';
-
+import 'dart:io'; 
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
 
 class CreateQuizPage extends StatefulWidget {
   final DocumentSnapshot? quiz;
@@ -99,23 +99,22 @@ class _CreateQuizPageState extends State<CreateQuizPage> {
     }
   }
 
-  void pickFileWeb() {
-    final uploadInput = html.FileUploadInputElement()..accept = '.pdf,.doc,.docx';
-    uploadInput.click();
 
-    uploadInput.onChange.listen((event) {
-      final file = uploadInput.files?.first;
-      final reader = html.FileReader();
+  Future<void> pickFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'doc', 'docx'],
+      withData: true,
+    );
 
-      reader.readAsArrayBuffer(file!);
-      reader.onLoadEnd.listen((e) {
-        setState(() {
-          fileName = file.name;
-          fileBytes = reader.result as Uint8List;
-        });
+    if (result != null && result.files.single.bytes != null) {
+      setState(() {
+        fileBytes = result.files.single.bytes!;
+        fileName = result.files.single.name;
       });
-    });
+    }
   }
+
 
   void addNewQuestion() {
     setState(() {
@@ -319,7 +318,7 @@ class _CreateQuizPageState extends State<CreateQuizPage> {
               const SizedBox(height: 20),
               Text("📎 Or Pick a Quiz File"),
               ElevatedButton.icon(
-                onPressed: pickFileWeb,
+                onPressed: pickFile,
                 icon: Icon(Icons.upload_file),
                 label: Text("Pick File"),
               ),

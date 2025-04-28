@@ -31,21 +31,34 @@ dependencies:
   flutter:
     sdk: flutter
   cloud_firestore: ^5.6.0
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  path_provider: ^2.1.2
   intl: ^0.20.0
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  webview_flutter: ^4.4.1
   cupertino_icons: ^1.0.8
   firebase_core: ^3.11.0
   firebase_auth: ^5.4.2
   google_sign_in: ^6.2.1
   sqflite: ^2.4.2
-  path: ^1.9.1
-  google_fonts: ^2.1.0
+  path: any
+  google_fonts: ^5.1.0
   firebase_storage: ^12.4.2
   file_picker: ^6.1.1
+  url_launcher: ^6.2.2
+  syncfusion_flutter_pdfviewer: ^29.1.39   
+  open_file: ^3.3.2
+  http: ^1.2.1
+
+dependency_overrides:
+  file_picker:
+    git:
+      url: https://github.com/miguelpruivo/flutter_file_picker.git
+      ref: master
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -67,7 +80,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
-    - assets/images/animatedkidss.jpg
+    - assets/images/kidlearning.jpg
     #- assets/images/kidsanimation.jpg
     
   #   - images/a_dot_ham.jpeg
