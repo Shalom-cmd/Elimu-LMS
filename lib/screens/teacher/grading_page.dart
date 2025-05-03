@@ -205,7 +205,18 @@ class _GradingPageState extends State<GradingPage> {
 
     final String text;
     if (gradingAssignments) {
-      text = data['textAnswer'] ?? '';
+      final assignmentDoc = assignments.firstWhere((doc) => doc.id == selectedDocId);
+      final assignmentData = assignmentDoc.data() as Map<String, dynamic>;
+      final questionText = assignmentData['createdInAppText'];
+      if (questionText != null && questionText.toString().isNotEmpty) {
+        // In-app assignment with single question
+        final answerText = data['textAnswer'] ?? 'No answer';
+        text = "Q: $questionText\n📝 Answer: $answerText";
+      } else {
+        // Fallback: either file-based or blank
+        text = data['textAnswer'] ?? '';
+      }
+
     } else {
       final quizDoc = quizzes.firstWhere((doc) => doc.id == selectedDocId);
       final quizData = quizDoc.data() as Map<String, dynamic>;
@@ -216,7 +227,6 @@ class _GradingPageState extends State<GradingPage> {
         return "Q${i + 1}: $q\n📝 Answer: $answer";
       }).join('\n\n');
     }
-
 
     return Card(
       margin: EdgeInsets.symmetric(vertical: 8),

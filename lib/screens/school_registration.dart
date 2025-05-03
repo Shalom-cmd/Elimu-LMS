@@ -24,7 +24,7 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
   final TextEditingController startDateController = TextEditingController();
   final TextEditingController endDateController = TextEditingController();
   final TextEditingController schoolDescriptionController = TextEditingController();
-  final TextEditingController logoController = TextEditingController();
+  //final TextEditingController logoController = TextEditingController();
 
   Future<void> registerSchool() async {
     if (schoolNameController.text.trim().isEmpty ||
@@ -91,7 +91,7 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
           'endDate': endDateController.text.trim(),
         },
         'schoolDescription': schoolDescriptionController.text.trim(),
-        'logo': logoController.text.trim(),
+        //'logo': logoController.text.trim(),
         'createdAt': FieldValue.serverTimestamp(),
       });
 
@@ -132,7 +132,7 @@ class _SchoolRegistrationPageState extends State<SchoolRegistrationPage> {
             _buildTextField("End Date (yyyy-MM-dd)", endDateController),
 
             _buildTextField("School Description", schoolDescriptionController),
-            _buildTextField("School Logo (Optional)", logoController),
+           // _buildTextField("School Logo (Optional)", logoController),
 
             SizedBox(height: 20),
             ElevatedButton(

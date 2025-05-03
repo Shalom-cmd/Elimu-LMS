@@ -1,4 +1,3 @@
-// lib/messaging/messaging_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'chat_bubble.dart';
@@ -29,11 +28,15 @@ class _MessagingScreenState extends State<MessagingScreen> {
   String? _selectedReceiverName;
   Map<String, String> _lastMessages = {};
 
-  @override
-  void initState() {
-    super.initState();
+@override
+void initState() {
+  super.initState();
+  if (widget.schoolDomain.isNotEmpty) {
     _fetchLastMessages();
+  } else {
+    debugPrint("⚠️ MessagingScreen launched with empty schoolDomain");
   }
+}
 
   Future<void> _fetchLastMessages() async {
     final users = await _fetchUsersFromAllRoles();

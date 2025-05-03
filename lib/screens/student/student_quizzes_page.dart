@@ -30,7 +30,11 @@ class _StudentQuizzesPageState extends State<StudentQuizzesPage> {
   bool isLoading = true;
 
   List<Quiz> quizzes = [];
+  List<Quiz> unsubmittedQuizzes = [];
+  List<Quiz> submittedQuizzes = [];
+
   Map<String, Map<int, dynamic>> selectedAnswers = {};
+
 
   @override
   void initState() {
@@ -40,41 +44,61 @@ class _StudentQuizzesPageState extends State<StudentQuizzesPage> {
   }
 
   Future<void> resendPendingSubmissions() async {
-  final pendingBox = await Hive.openBox('pendingSubmissions');
-  final List pending = pendingBox.values.toList();
+    final pendingBox = await Hive.openBox('pendingSubmissions');
+    final List pending = pendingBox.values.toList();
 
-  if (pending.isEmpty) return;
+    if (pending.isEmpty) return;
 
-  for (var submission in pending) {
-    try {
-      if (submission['type'] == 'quiz') {
-        await FirebaseFirestore.instance
-            .collection('schools')
-            .doc(submission['schoolDomain'])
-            .collection('classes')
-            .doc(submission['grade'])
-            .collection('quizzes')
-            .doc(submission['quizId'])
-            .collection('submissions')
-            .doc(submission['uid'])
-            .set({
-              'studentId': submission['uid'],
-              'studentName': submission['studentName'],
-              'answers': Map<String, dynamic>.from(submission['answers'].map((key, value) => MapEntry(key.toString(), value.toString()))),
-              'submittedAt': FieldValue.serverTimestamp(),
-            });
+    for (var submission in pending) {
+      try {
+        if (submission['type'] == 'quiz') {
+          await FirebaseFirestore.instance
+              .collection('schools')
+              .doc(submission['schoolDomain'])
+              .collection('classes')
+              .doc(submission['grade'])
+              .collection('quizzes')
+              .doc(submission['quizId'])
+              .collection('submissions')
+              .doc(submission['uid'])
+              .set({
+                'studentId': submission['uid'],
+                'studentName': submission['studentName'],
+                'answers': Map<String, dynamic>.from(submission['answers'].map((key, value) => MapEntry(key.toString(), value.toString()))),
+                'submittedAt': FieldValue.serverTimestamp(),
+              });
 
+            if (mounted) {
+              setState(() {
+                unsubmittedQuizzes.removeWhere((q) => q.id == submission['quizId']);
+                final matchingQuiz = quizzes.firstWhere(
+                  (q) => q.id == submission['quizId'],
+                  orElse: () => Quiz(
+                    id: submission['quizId'],
+                    title: 'Unknown',
+                    subject: 'Unknown',
+                    type: 'file',
+                    questions: [],
+                    dueDate: '',
+                  ),
+                );
+                submittedQuizzes.add(matchingQuiz);
+              });
+            }
+
+          final key = pendingBox.keys.firstWhere((k) => pendingBox.get(k) == submission);
+          await pendingBox.delete(key);
+          print('✅ Resent pending quiz submission.');
+          
+          final submittedBox = await Hive.openBox('submittedQuizzesBox');
+          await submittedBox.put(submission['quizId'], true);
+        }
         
-        final key = pendingBox.keys.firstWhere((k) => pendingBox.get(k) == submission);
-        await pendingBox.delete(key);
-        print('✅ Resent pending quiz submission.');
+      } catch (e) {
+        print('❌ Failed to resend pending submission: $e');
       }
-      
-    } catch (e) {
-      print('❌ Failed to resend pending submission: $e');
     }
   }
-}
 
   Future<void> fetchStudentInfo() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -91,7 +115,6 @@ class _StudentQuizzesPageState extends State<StudentQuizzesPage> {
       }
       return;
     }
-
     // online mode
     final studentId = user.uid;
     final schools = await FirebaseFirestore.instance.collection('schools').get();
@@ -184,10 +207,26 @@ class _StudentQuizzesPageState extends State<StudentQuizzesPage> {
       await saveQuizzesToHive(available);
       print('✅ Saved ${available.length} quizzes to Hive');
 
+      final submittedBox = await Hive.openBox('submittedQuizzesBox');
+      final List<Quiz> submitted = [];
+      final List<Quiz> unsubmitted = [];
+
+      for (var quiz in available) {
+        final isSubmitted = submittedBox.get(quiz.id, defaultValue: false);
+        if (isSubmitted) {
+          submitted.add(quiz);
+        } else {
+          unsubmitted.add(quiz);
+        }
+      }
+
       setState(() {
-        quizzes = available;
+        quizzes = [...unsubmitted, ...submitted]; // optional, keep all in one if you want
+        unsubmittedQuizzes = unsubmitted;
+        submittedQuizzes = submitted;
         isLoading = false;
       });
+
     } catch (e) {
       print('🔥 Firestore failed, loading from Hive: $e');
 
@@ -253,7 +292,14 @@ class _StudentQuizzesPageState extends State<StudentQuizzesPage> {
         'answers': stringifiedAnswers,
         'timestamp': DateTime.now().toIso8601String(),
       };
+        final submittedBox = await Hive.openBox('submittedQuizzesBox');
+        await submittedBox.put(quizId, true);
 
+        setState(() {
+          unsubmittedQuizzes.removeWhere((q) => q.id == quizId);
+          submittedQuizzes.add(quiz);
+          selectedAnswers.remove(quizId);
+        });
       await FirebaseFirestore.instance
           .collection('schools')
           .doc(schoolDomain)
@@ -270,13 +316,8 @@ class _StudentQuizzesPageState extends State<StudentQuizzesPage> {
             'submittedAt': FieldValue.serverTimestamp(),
           });
 
-      setState(() {
-        quizzes.removeWhere((q) => q.id == quizId);
-        selectedAnswers.remove(quizId);
-      });
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Quiz submitted!")),
+      SnackBar(content: Text("✅ Quiz submitted!")),
       );
     } catch (e) {
       print('❌ Submission failed, saving locally: $e');
@@ -305,110 +346,136 @@ class _StudentQuizzesPageState extends State<StudentQuizzesPage> {
       appBar: AppBar(title: Text("📝 My Quizzes")),
       body: isLoading
           ? Center(child: CircularProgressIndicator())
-          : quizzes.isEmpty
+          : (unsubmittedQuizzes.isEmpty && submittedQuizzes.isEmpty)
               ? Center(child: Text("No quizzes available."))
-              : ListView.builder(
+              : ListView(
                   padding: EdgeInsets.all(16),
-                  itemCount: quizzes.length,
-                  itemBuilder: (context, index) {
-                    final quiz = quizzes[index];
-                    final title = quiz.title;
-                    final subject = quiz.subject;
-                    final type = quiz.type;
-                    final inAppText = quiz.createdInAppText ?? '';
-                    final fileUrl = quiz.fileUrl;
-                    final questions = quiz.questions ?? [];
-                    final dueDate = DateTime.tryParse(quiz.dueDate);
-                    return Card(
-                      margin: EdgeInsets.only(bottom: 20),
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text("📘 $subject", style: TextStyle(fontWeight: FontWeight.bold)),
-                            Text("📝 $title", style: TextStyle(fontSize: 18)),
-                            if (dueDate != null) Text("📅 Due: ${dueDate.toLocal()}"),
-                            SizedBox(height: 10),
-                            if (type == "file" && fileUrl != null)
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  TextButton.icon(
-                                    icon: Icon(Icons.picture_as_pdf),
-                                    label: Text("Open Quiz File"),
-                                    onPressed: () => openQuizFile(fileUrl!, quiz.id),
-                                  ),
-                                  TextField(
-                                    decoration: InputDecoration(hintText: "Write your answer here..."),
-                                    maxLines: 3,
-                                    onChanged: (val) {
-                                      selectedAnswers.putIfAbsent(quiz.id, () => {});
-                                      selectedAnswers[quiz.id]![0] = val.trim();
-                                    },
-                                  ),
-                                  SizedBox(height: 10),
-                                  ElevatedButton.icon(
-                                    icon: Icon(Icons.upload_file),
-                                    label: Text("Upload File Instead"),
-                                    onPressed: () => uploadFileAnswer(quiz.id),
-                                  ),
-                                ],
-                              ),
-                            if (type == "in-app" && questions.isNotEmpty)
-                              Column(
-                                children: List.generate(questions.length, (qIndex) {
-                                  final q = questions[qIndex];
-                                  final qText = q['question'];
-                                  final options = List<String>.from(q['options'] ?? []);
-                                  final isMCQ = options.any((o) => o.trim().isNotEmpty);
-
-                                  return Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text("Q${qIndex + 1}: $qText"),
-                                      if (isMCQ)
-                                        Column(
-                                          children: List.generate(options.length, (i) {
-                                            return RadioListTile(
-                                              title: Text(options[i]),
-                                              value: options[i],
-                                              groupValue: selectedAnswers[quiz.id]?[qIndex],
-                                              onChanged: (val) {
-                                                setState(() {
-                                                  selectedAnswers.putIfAbsent(quiz.id, () => {});
-                                                  selectedAnswers[quiz.id]![qIndex] = val!;
-                                                });
-                                              },
-                                            );
-                                          }),
-                                        ),
-                                      if (!isMCQ)
-                                        TextField(
-                                          decoration: InputDecoration(hintText: "Your answer"),
-                                          onChanged: (val) {
-                                            selectedAnswers.putIfAbsent(quiz.id, () => {});
-                                            selectedAnswers[quiz.id]![qIndex] = val.trim();
-                                          },
-                                        ),
-                                      SizedBox(height: 16),
-                                    ],
-                                  );
-                                }),
-                              ),
-                            SizedBox(height: 10),
-                            ElevatedButton.icon(
-                              onPressed: () => submitQuiz(quiz),
-                              icon: Icon(Icons.check),
-                              label: Text("Submit"),
-                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                            )
-                          ],
-                        ),
+                  children: [
+                    if (unsubmittedQuizzes.isNotEmpty) ...[
+                      Text(
+                        "📤 Unsubmitted Quizzes",
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
-                    );
-                  },
+                      SizedBox(height: 10),
+                      ...unsubmittedQuizzes.map((quiz) => buildQuizCard(quiz)).toList(),
+                    ],
+                    if (submittedQuizzes.isNotEmpty) ...[
+                      SizedBox(height: 30),
+                      Text(
+                        "✅ Submitted Quizzes",
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      ),
+                      SizedBox(height: 10),
+                      ...submittedQuizzes.map((quiz) => buildQuizCard(quiz, isSubmitted: true)).toList(),
+                    ],
+                  ],
                 ),
     );
   }
+
+  Widget buildQuizCard(Quiz quiz, {bool isSubmitted = false}) {
+    final title = quiz.title;
+    final subject = quiz.subject;
+    final type = quiz.type;
+    final inAppText = quiz.createdInAppText ?? '';
+    final fileUrl = quiz.fileUrl;
+    final questions = quiz.questions ?? [];
+    final dueDate = DateTime.tryParse(quiz.dueDate);
+
+    return Card(
+      margin: EdgeInsets.only(bottom: 20),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("📘 $subject", style: TextStyle(fontWeight: FontWeight.bold)),
+            Text("📝 $title", style: TextStyle(fontSize: 18)),
+            if (dueDate != null) Text("📅 Due: ${dueDate.toLocal()}"),
+            if (isSubmitted)
+              Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text("✅ Already Submitted", style: TextStyle(color: Colors.green)),
+              ),
+            if (!isSubmitted) ...[
+              SizedBox(height: 10),
+              if (type == "file" && fileUrl != null)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextButton.icon(
+                      icon: Icon(Icons.picture_as_pdf),
+                      label: Text("Open Quiz File"),
+                      onPressed: () => openQuizFile(fileUrl!, quiz.id),
+                    ),
+                    TextField(
+                      decoration: InputDecoration(hintText: "Write your answer here..."),
+                      maxLines: 3,
+                      onChanged: (val) {
+                        selectedAnswers.putIfAbsent(quiz.id, () => {});
+                        selectedAnswers[quiz.id]![0] = val.trim();
+                      },
+                    ),
+                    SizedBox(height: 10),
+                    ElevatedButton.icon(
+                      icon: Icon(Icons.upload_file),
+                      label: Text("Upload File Instead"),
+                      onPressed: () => uploadFileAnswer(quiz.id),
+                    ),
+                  ],
+                ),
+              if (type == "in-app" && questions.isNotEmpty)
+                Column(
+                  children: List.generate(questions.length, (qIndex) {
+                    final q = questions[qIndex];
+                    final qText = q['question'];
+                    final options = List<String>.from(q['options'] ?? []);
+                    final isMCQ = options.any((o) => o.trim().isNotEmpty);
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("Q${qIndex + 1}: $qText"),
+                        if (isMCQ)
+                          Column(
+                            children: List.generate(options.length, (i) {
+                              return RadioListTile(
+                                title: Text(options[i]),
+                                value: options[i],
+                                groupValue: selectedAnswers[quiz.id]?[qIndex],
+                                onChanged: (val) {
+                                  setState(() {
+                                    selectedAnswers.putIfAbsent(quiz.id, () => {});
+                                    selectedAnswers[quiz.id]![qIndex] = val!;
+                                  });
+                                },
+                              );
+                            }),
+                          ),
+                        if (!isMCQ)
+                          TextField(
+                            decoration: InputDecoration(hintText: "Your answer"),
+                            onChanged: (val) {
+                              selectedAnswers.putIfAbsent(quiz.id, () => {});
+                              selectedAnswers[quiz.id]![qIndex] = val.trim();
+                            },
+                          ),
+                        SizedBox(height: 16),
+                      ],
+                    );
+                  }),
+                ),
+              SizedBox(height: 10),
+              ElevatedButton.icon(
+                onPressed: () => submitQuiz(quiz),
+                icon: Icon(Icons.check),
+                label: Text("Submit"),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+              )
+            ]
+          ],
+        ),
+      ),
+    );  
+   }
 }

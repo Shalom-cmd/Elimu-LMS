@@ -27,12 +27,18 @@ class _StudentDashboardState extends State<StudentDashboard> {
   bool isLoading = true;
   String photoUrl = '';
   bool isUploadingPhoto = false;
+  String parentEmailDisplay = '';
+  String schoolName = '';
+  int assignmentsCount = 0;
+  int quizzesCount = 0;
+  String uid = '';
 
   @override
   void initState() {
     super.initState();
     fetchStudentInfo();
   }
+
   void logout(BuildContext context) async {
     await FirebaseAuth.instance.signOut();
     Navigator.pushAndRemoveUntil(
@@ -41,136 +47,186 @@ class _StudentDashboardState extends State<StudentDashboard> {
       (route) => false,
     );
   }
+
   Future<void> fetchStudentInfo() async {
     final user = FirebaseAuth.instance.currentUser;
+    final box = Hive.box('profileBox');
 
     if (user == null) {
-      // offline fallback
-      final box = Hive.box('profileBox');
+      // Offline fallback
       final cached = box.get('studentProfile');
-
       if (cached != null) {
         setState(() {
           studentName = cached['fullName'] ?? '';
           grade = cached['grade'] ?? '';
+          schoolName = cached['schoolName'] ?? 'Unavailable offline';
+          teacherName = cached['teacherName'] ?? 'Unavailable offline';
+          parentEmailDisplay = cached['parentEmail'] ?? 'Unavailable offline';
+          photoUrl = cached['photoUrl'] ?? '';
           schoolDomain = cached['schoolDomain'] ?? '';
-          teacherName = 'Unavailable offline';
           isLoading = false;
         });
       }
       return;
     }
+    try {
+      uid = user.uid;
+      // Try cached school domain first
+      final cachedProfile = box.get('studentProfile');
+      String? cachedDomain = cachedProfile?['schoolDomain'];
 
-    // 🌐 Online path
-    final schools = await FirebaseFirestore.instance.collection('schools').get();
-
-    for (var school in schools.docs) {
-      final doc = await FirebaseFirestore.instance
-          .collection('schools')
-          .doc(school.id)
-          .collection('students')
-          .doc(user.uid)
-          .get();
-
-      if (doc.exists) {
-        final studentData = doc.data()!;
-        final gradeLevel = studentData['grade'];
-        final box = Hive.box('profileBox');
-        await box.put('studentProfile', {
-          'uid': user.uid,
-          'fullName': studentData['fullName'],
-          'grade': gradeLevel,
-          'schoolDomain': school.id,
-        });
-
-        final teacherSnapshot = await FirebaseFirestore.instance
-            .collection('schools')
-            .doc(school.id)
-            .collection('teachers')
-            .where('gradeLevel', isEqualTo: gradeLevel)
-            .limit(1)
-            .get();
-
-        setState(() {
-          studentName = studentData['fullName'];
-          grade = gradeLevel;
-          schoolDomain = school.id;
-          teacherName = teacherSnapshot.docs.isNotEmpty
-              ? teacherSnapshot.docs.first['fullName']
-              : 'Unknown';
-          isLoading = false;
-        });
-
-        break;
-      }
-    }
-  }
-
-  Future<void> pickAndUploadProfilePicture() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-    );
-
-    if (result != null && result.files.single.bytes != null) {
-      setState(() {
-        isUploadingPhoto = true;
-      });
-
-      try {
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child('profile_pictures')
-            .child('${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-        final uploadTask = await storageRef.putData(result.files.single.bytes!);
-
-        final downloadUrl = await uploadTask.ref.getDownloadURL();
-
-        // Save new photoUrl to Firestore
+      if (cachedDomain == null || cachedDomain.isEmpty) {
+        // fallback: loop through schools once and cache it
         final schools = await FirebaseFirestore.instance.collection('schools').get();
         for (var school in schools.docs) {
           final studentDoc = await FirebaseFirestore.instance
               .collection('schools')
               .doc(school.id)
               .collection('students')
-              .doc(user.uid)
+              .doc(uid)
               .get();
 
           if (studentDoc.exists) {
-            await studentDoc.reference.update({'photoUrl': downloadUrl});
-            setState(() {
-              photoUrl = downloadUrl;
-            });
-
-            final box = Hive.box('profileBox');
-            final cachedProfile = box.get('studentProfile');
-            if (cachedProfile != null) {
-              cachedProfile['photoUrl'] = downloadUrl;
-              await box.put('studentProfile', cachedProfile);
-            }
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('✅ Profile picture updated!')),
-            );
+            cachedDomain = school.id;
             break;
           }
         }
-      } catch (e) {
-        print('❌ Failed to upload profile picture: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('❌ Failed to upload picture. Try again later.')),
-        );
-      } finally {
+      }
+
+      if (cachedDomain == null || cachedDomain.isEmpty) throw Exception('Student domain not found');
+
+      final studentDoc = await FirebaseFirestore.instance
+          .collection('schools')
+          .doc(cachedDomain)
+          .collection('students')
+          .doc(uid)
+          .get();
+
+      if (!studentDoc.exists) throw Exception('Student profile not found');
+
+      final studentData = studentDoc.data()!;
+      final fullName = studentData['fullName'];
+      final gradeLevel = studentData['grade'];
+      final parentEmail = studentData['parentEmail'] ?? 'Unavailable';
+      final profilePic = studentData['photoUrl'] ?? '';
+
+      final schoolData = await FirebaseFirestore.instance
+          .collection('schools')
+          .doc(cachedDomain)
+          .get();
+
+      final schoolDisplayName = schoolData.data()?['schoolName'] ?? cachedDomain;
+
+      final teacherSnapshot = await FirebaseFirestore.instance
+          .collection('schools')
+          .doc(cachedDomain)
+          .collection('teachers')
+          .where('gradeLevel', isEqualTo: gradeLevel)
+          .limit(1)
+          .get();
+
+      final teacher = teacherSnapshot.docs.isNotEmpty
+          ? teacherSnapshot.docs.first['fullName']
+          : 'Unknown';
+
+      // Save to Hive
+      await box.put('studentProfile', {
+        'uid': uid,
+        'fullName': fullName,
+        'grade': gradeLevel,
+        'schoolName': schoolDisplayName,
+        'schoolDomain': cachedDomain, 
+        'teacherName': teacher,
+        'parentEmail': parentEmail,
+        'photoUrl': profilePic,
+      });
+
+      setState(() {
+        studentName = fullName;
+        grade = gradeLevel;
+        schoolName = schoolDisplayName;
+        schoolDomain = cachedDomain!;
+        teacherName = teacher;
+        parentEmailDisplay = parentEmail;
+        photoUrl = profilePic;
+        isLoading = false;
+      });
+    } catch (e) {
+      print("⚠️ Error fetching student info: $e");
+      final cached = box.get('studentProfile');
+      if (cached != null) {
         setState(() {
-          isUploadingPhoto = false;
+          studentName = cached['fullName'] ?? '';
+          grade = cached['grade'] ?? '';
+          schoolName = cached['schoolName'] ?? 'Unavailable';
+          schoolDomain = cached['schoolDomain'] ?? '';
+          teacherName = cached['teacherName'] ?? 'Unavailable';
+          parentEmailDisplay = cached['parentEmail'] ?? 'Unavailable';
+          photoUrl = cached['photoUrl'] ?? '';
+          isLoading = false;
         });
       }
     }
   }
 
+  Future<void> chooseAvatarFromAssets() async {
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final avatarPaths = List.generate(
+          10,
+          (index) => 'assets/images/student_avatars/avatar${index + 1}.png',
+        );
+        return AlertDialog(
+          title: Text("Choose Your Avatar"),
+          content: SizedBox(
+            height: 300, 
+            width: double.maxFinite,
+            child: GridView.count(
+              crossAxisCount: 2,
+              shrinkWrap: true, 
+              mainAxisSpacing: 12,
+              crossAxisSpacing: 12,
+              children: avatarPaths.map((path) {
+                return GestureDetector(
+                  onTap: () => Navigator.pop(context, path),
+                  child: ClipOval( 
+                    child: Image.asset(path, fit: BoxFit.cover),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selected != null) {
+      // upload to Firestore or Hive
+      setState(() {
+        photoUrl = selected; 
+      });
+
+      final user = FirebaseAuth.instance.currentUser;
+      final schools = await FirebaseFirestore.instance.collection('schools').get();
+      for (var school in schools.docs) {
+        final studentDoc = await FirebaseFirestore.instance
+            .collection('schools')
+            .doc(school.id)
+            .collection('students')
+            .doc(user!.uid)
+            .get();
+
+        if (studentDoc.exists) {
+          await studentDoc.reference.update({'photoUrl': selected});
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('✅ Avatar selected!')),
+          );
+          break;
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +241,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Hello,", style: TextStyle(color: Colors.white, fontSize: 20)),
+                const Text("👋 Hello,", style: TextStyle(color: Colors.white, fontSize: 20)),
                 Text(studentName, style: const TextStyle(color: Colors.white, fontSize: 22)),
                 const Spacer(),
                 Text("Grade: $grade", style: const TextStyle(color: Colors.white70)),
@@ -194,7 +250,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
           ),
             ListTile(
               leading: const Icon(Icons.folder_copy),
-              title: const Text("Class Resources"),
+              title: const Text("Class Resources 📚"),
               onTap: () {
                 Navigator.push(
                   context,
@@ -204,7 +260,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             ),
             ListTile(
               leading: const Icon(Icons.assignment),
-              title: const Text("Assignments"),
+              title: const Text("Assignments 📝"),
               onTap: () {
                   Navigator.push(
                   context,
@@ -214,7 +270,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             ),
             ListTile(
               leading: const Icon(Icons.quiz),
-              title: const Text("Quizzes"),
+              title: const Text("Quizzes 🧠"),
               onTap: () {
                 Navigator.push(
                   context,
@@ -224,7 +280,7 @@ class _StudentDashboardState extends State<StudentDashboard> {
             ),
             ListTile(
               leading: Icon(Icons.grade),
-              title: Text("Grades"),
+              title: Text("Grades 📊"),
               onTap: () {
                 Navigator.push(
                   context,
@@ -235,7 +291,25 @@ class _StudentDashboardState extends State<StudentDashboard> {
             ListTile(
               leading: Icon(Icons.message),
               title: Text('Messages'),
+              enabled: !isLoading && schoolDomain.isNotEmpty,
               onTap: () {
+                if (schoolDomain.isEmpty) {
+                  showDialog(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      title: Text('Not Ready Yet'),
+                      content: Text('Please wait for your profile to finish loading.'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text('OK'),
+                        ),
+                      ],
+                    ),
+                  );
+                  return;
+                }
+
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -257,56 +331,136 @@ class _StudentDashboardState extends State<StudentDashboard> {
           ],
         ),
       ),
-  
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                  child: GestureDetector(
-                    onTap: isUploadingPhoto ? null : pickAndUploadProfilePicture,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 50, 
-                          backgroundImage: photoUrl.isNotEmpty
-                              ? NetworkImage(photoUrl)
-                              : null,
-                          child: photoUrl.isEmpty
-                              ? Icon(Icons.person, size: 50, color: Colors.white)
-                              : null,
-                          backgroundColor: Colors.grey[300],
+
+  body: isLoading
+      ? const Center(child: CircularProgressIndicator())
+      : SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Column(
+              children: [
+              GestureDetector(
+                onTap: isUploadingPhoto ? null : chooseAvatarFromAssets,
+                child: Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                  CircleAvatar(
+                    radius: 55,
+                    backgroundImage: photoUrl.isEmpty
+                        ? null
+                        : photoUrl.startsWith('assets/')
+                            ? AssetImage(photoUrl)
+                            : NetworkImage(photoUrl) as ImageProvider,
+                    child: photoUrl.isEmpty
+                        ? Icon(Icons.person, size: 60, color: Colors.white)
+                        : null,
+                    backgroundColor: Colors.grey[300],
+                  ),
+                    if (isUploadingPhoto)
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withOpacity(0.5),
+                          child: const Center(child: CircularProgressIndicator(color: Colors.white)),
                         ),
-                        if (isUploadingPhoto)
-                          const CircularProgressIndicator(
-                            color: Colors.white,
-                          ),
-                      ],
+                      ),
+                    Positioned(
+                      bottom: 4,
+                      right: 4,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blueAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                        ),
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.edit, size: 18, color: Colors.white),
+                      ),
                     ),
+                  ],
+                ),
+              ),
+                const SizedBox(height: 24),
+
+                // Profile card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black12,
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "👋 Hello, $studentName",
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.school, color: Colors.orange),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "School: $schoolName",
+                              style: TextStyle(fontSize: 18),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      Row(
+                        children: [
+                          Icon(Icons.menu_book, color: Colors.blue),
+                          const SizedBox(width: 8),
+                          Text("Grade: $grade", style: TextStyle(fontSize: 18)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      Row(
+                        children: [
+                          Icon(Icons.person_pin, color: Colors.deepPurple),
+                          const SizedBox(width: 8),
+                          Text("Teacher: $teacherName",
+                              style: TextStyle(fontSize: 18)),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      Row(
+                        children: [
+                          Icon(Icons.email_outlined, color: Colors.teal),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "Parent Email: $parentEmailDisplay",
+                              style: TextStyle(fontSize: 18),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
-                  const SizedBox(height: 20),
-                  Text(
-                    "👋 Hello, $studentName",
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    "📘 Grade: $grade",
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    "👩🏽‍🏫 Your Teacher: $teacherName",
-                    style: const TextStyle(fontSize: 18),
-                  ),
-                ],
-              ),
+              ],
             ),
+          ),
+        ),
       );
     }
   }

@@ -43,44 +43,31 @@ class _LandingPageState extends State<LandingPage> with TickerProviderStateMixin
     bool isMobile = screenSize.width < 600;
 
     return Scaffold(
-    appBar: PreferredSize(
-      preferredSize: Size(screenSize.width, isMobile ? 80 : 100),
-      child: SafeArea(
-        child: Container(
-          color: Colors.blue[900],
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: isMobile ? 12 : 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'ELIMU LMS',
-                style: TextStyle(
-                  fontSize: isMobile ? 20 : 36,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      _buildAboutUsButton(context, isMobile),
-                      SizedBox(width: 10),
-                      _buildRegisterSchoolButton(context, isMobile),
-                    ],
+      appBar: PreferredSize(
+        preferredSize: Size(screenSize.width, isMobile ? 80 : 100),
+        child: SafeArea(
+          child: Container(
+            color: Colors.blue[900],
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: isMobile ? 12 : 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'ELIMU LMS',
+                  style: TextStyle(
+                    fontSize: isMobile ? 25 : 36,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: 1.2,
                   ),
                 ),
-              ),
-            ],
+                Spacer(),
+                _buildAboutUsButton(context, isMobile),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-
       body: SafeArea(
         child: Stack(
           children: [
@@ -108,55 +95,62 @@ class _LandingPageState extends State<LandingPage> with TickerProviderStateMixin
                     ),
                     SizedBox(height: 20),
                     isMobile
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _buildMainActionButton("Sign Up", Colors.blueAccent, () {
-                              setState(() {
-                                _isSignupVisible = !_isSignupVisible;
-                                _isLoginVisible = false;
-                                _isSignupVisible
-                                    ? _signupController.forward()
-                                    : _signupController.reverse();
-                              });
-                            }, isMobile),
-                            SizedBox(height: 12),
-                            _buildMainActionButton("Log In", Colors.blueAccent, () {
-                              setState(() {
-                                _isLoginVisible = !_isLoginVisible;
-                                _isSignupVisible = false;
-                                _isLoginVisible
-                                    ? _loginController.forward()
-                                    : _loginController.reverse();
-                              });
-                            }, isMobile),
-                          ],
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildMainActionButton("Sign Up", Colors.blueAccent, () {
-                              setState(() {
-                                _isSignupVisible = !_isSignupVisible;
-                                _isLoginVisible = false;
-                                _isSignupVisible
-                                    ? _signupController.forward()
-                                    : _signupController.reverse();
-                              });
-                            }, isMobile),
-                            SizedBox(width: 12),
-                            _buildMainActionButton("Log In", Colors.blueAccent, () {
-                              setState(() {
-                                _isLoginVisible = !_isLoginVisible;
-                                _isSignupVisible = false;
-                                _isLoginVisible
-                                    ? _loginController.forward()
-                                    : _loginController.reverse();
-                              });
-                            }, isMobile),
-                          ],
-                        ),
-
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildMainActionButton("Register School", Colors.blueAccent, () {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => SchoolRegistrationPage()));
+                              }, isMobile),
+                              SizedBox(height: 12),
+                              _buildMainActionButton("Sign Up", Colors.blueAccent, () {
+                                setState(() {
+                                  _isSignupVisible = !_isSignupVisible;
+                                  _isLoginVisible = false;
+                                  _isSignupVisible
+                                      ? _signupController.forward()
+                                      : _signupController.reverse();
+                                });
+                              }, isMobile),
+                              SizedBox(height: 12),
+                              _buildMainActionButton("Log In", Colors.blueAccent, () {
+                                setState(() {
+                                  _isLoginVisible = !_isLoginVisible;
+                                  _isSignupVisible = false;
+                                  _isLoginVisible
+                                      ? _loginController.forward()
+                                      : _loginController.reverse();
+                                });
+                              }, isMobile),
+                            ],
+                          )
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildMainActionButton("Register School", Colors.blueAccent, () {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => SchoolRegistrationPage()));
+                              }, isMobile),
+                              SizedBox(width: 12),
+                              _buildMainActionButton("Sign Up", Colors.blueAccent, () {
+                                setState(() {
+                                  _isSignupVisible = !_isSignupVisible;
+                                  _isLoginVisible = false;
+                                  _isSignupVisible
+                                      ? _signupController.forward()
+                                      : _signupController.reverse();
+                                });
+                              }, isMobile),
+                              SizedBox(width: 12),
+                              _buildMainActionButton("Log In", Colors.blueAccent, () {
+                                setState(() {
+                                  _isLoginVisible = !_isLoginVisible;
+                                  _isSignupVisible = false;
+                                  _isLoginVisible
+                                      ? _loginController.forward()
+                                      : _loginController.reverse();
+                                });
+                              }, isMobile),
+                            ],
+                          ),
                     SizedBox(height: 30),
                     AnimatedSize(
                       duration: Duration(milliseconds: 300),
@@ -191,35 +185,9 @@ class _LandingPageState extends State<LandingPage> with TickerProviderStateMixin
   }
 
   Widget _buildAboutUsButton(BuildContext context, bool isMobile) {
-  return InkWell(
-    onTap: () {
-      Navigator.push(context, MaterialPageRoute(builder: (context) => AboutUsPage()));
-    },
-    child: Container(
-      padding: EdgeInsets.symmetric(
-        vertical: isMobile ? 6 : 14,
-        horizontal: isMobile ? 14 : 24,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.green[700],
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        "About Us",
-        style: TextStyle(
-          fontSize: isMobile ? 16 : 20,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        ),
-      ),
-    ),
-  );
-}
-
-  Widget _buildRegisterSchoolButton(BuildContext context, bool isMobile) {
     return InkWell(
       onTap: () {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => SchoolRegistrationPage()));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => AboutUsPage()));
       },
       child: Container(
         padding: EdgeInsets.symmetric(
@@ -231,7 +199,7 @@ class _LandingPageState extends State<LandingPage> with TickerProviderStateMixin
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
-          "Register School",
+          "About Us",
           style: TextStyle(
             fontSize: isMobile ? 16 : 20,
             fontWeight: FontWeight.w600,
@@ -241,7 +209,6 @@ class _LandingPageState extends State<LandingPage> with TickerProviderStateMixin
       ),
     );
   }
-
 
   Widget _buildMainActionButton(String text, Color color, VoidCallback onPressed, bool isMobile) {
     return ElevatedButton(

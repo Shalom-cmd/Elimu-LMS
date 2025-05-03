@@ -23,30 +23,36 @@ class _ViewGradesPageState extends State<ViewGradesPage> {
     fetchStudentInfo();
   }
 
-  Future<void> fetchStudentInfo() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+Future<void> fetchStudentInfo() async {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return;
 
-    uid = user.uid;
-    final schools = await FirebaseFirestore.instance.collection('schools').get();
+  uid = user.uid;
+  final schools = await FirebaseFirestore.instance.collection('schools').get();
 
-    for (var school in schools.docs) {
-      final doc = await FirebaseFirestore.instance
-          .collection('schools')
-          .doc(school.id)
-          .collection('students')
-          .doc(uid)
-          .get();
+  for (var school in schools.docs) {
+    final doc = await FirebaseFirestore.instance
+        .collection('schools')
+        .doc(school.id)
+        .collection('students')
+        .doc(uid)
+        .get();
 
-      if (doc.exists) {
-        final data = doc.data()!;
-        schoolDomain = school.id;
+    if (doc.exists) {
+      final data = doc.data()!;
+
+      if (data.containsKey('grade') && data['grade'] != null) {
         grade = data['grade'];
+        schoolDomain = school.id;
         await fetchGrades();
-        break;
+      } else {
+        print('⚠️ Missing "grade" for student: $uid');
       }
+
+      break; 
     }
   }
+}
 
   Future<void> fetchGrades() async {
     final assignmentsSnap = await FirebaseFirestore.instance
@@ -67,30 +73,31 @@ class _ViewGradesPageState extends State<ViewGradesPage> {
 
     List<Map<String, dynamic>> allGrades = [];
 
-    for (var doc in assignmentsSnap.docs) {
-      final submission = await doc.reference.collection('submissions').doc(uid).get();
-      if (submission.exists && submission['grade'] != null) {
-        allGrades.add({
-          'title': doc['title'],
-          'subject': doc['subject'],
-          'type': 'Assignment',
-          'grade': submission['grade'],
-        });
-      }
+  for (var doc in assignmentsSnap.docs) {
+    final submission = await doc.reference.collection('submissions').doc(uid).get();
+    final submissionData = submission.data();
+    if (submission.exists && submissionData != null && submissionData.containsKey('grade')) {
+      allGrades.add({
+        'title': doc['title'],
+        'subject': doc['subject'],
+        'type': 'Assignment',
+        'grade': submissionData['grade'],
+      });
     }
+  }
 
-    for (var doc in quizzesSnap.docs) {
-      final submission = await doc.reference.collection('submissions').doc(uid).get();
-      if (submission.exists && submission['grade'] != null) {
-        allGrades.add({
-          'title': doc['title'],
-          'subject': doc['subject'],
-          'type': 'Quiz',
-          'grade': submission['grade'],
-        });
-      }
+  for (var doc in quizzesSnap.docs) {
+    final submission = await doc.reference.collection('submissions').doc(uid).get();
+    final submissionData = submission.data();
+    if (submission.exists && submissionData != null && submissionData.containsKey('grade')) {
+      allGrades.add({
+        'title': doc['title'],
+        'subject': doc['subject'],
+        'type': 'Quiz',
+        'grade': submissionData['grade'],
+      });
     }
-
+  }
     setState(() {
       grades = allGrades;
       isLoading = false;
@@ -98,27 +105,64 @@ class _ViewGradesPageState extends State<ViewGradesPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("📊 My Grades")),
-      body: isLoading
-          ? Center(child: CircularProgressIndicator())
-          : grades.isEmpty
-              ? Center(child: Text("No grades available yet."))
-              : ListView.builder(
-                  padding: EdgeInsets.all(16),
-                  itemCount: grades.length,
-                  itemBuilder: (context, index) {
-                    final grade = grades[index];
-                    return Card(
-                      child: ListTile(
-                        title: Text("${grade['title']} (${grade['type']})"),
-                        subtitle: Text("📘 ${grade['subject']}"),
-                        trailing: Text("🎯 ${grade['grade']}", style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    );
-                  },
+@override
+Widget build(BuildContext context) {
+  final assignmentGrades = grades.where((g) => g['type'] == 'Assignment').toList();
+  final quizGrades = grades.where((g) => g['type'] == 'Quiz').toList();
+
+  return Scaffold(
+    appBar: AppBar(title: Text("📊 My Grades")),
+    body: isLoading
+        ? Center(child: CircularProgressIndicator())
+        : grades.isEmpty
+            ? Center(child: Text("No grades available yet."))
+            : SingleChildScrollView(
+                padding: EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (assignmentGrades.isNotEmpty) ...[
+                      Text("📝 Assignments", style: Theme.of(context).textTheme.titleLarge),
+                      SizedBox(height: 8),
+                      ...assignmentGrades.map(buildGradeCard),
+                      SizedBox(height: 20),
+                    ],
+                    if (quizGrades.isNotEmpty) ...[
+                      Text("🏆 Quizzes", style: Theme.of(context).textTheme.titleLarge),
+                      SizedBox(height: 8),
+                      ...quizGrades.map(buildGradeCard),
+                    ],
+                  ],
                 ),
+              ),
+  );
+}
+
+  Widget buildGradeCard(Map<String, dynamic> grade) {
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 8),
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        leading: Icon(
+          grade['type'] == 'Assignment' ? Icons.assignment : Icons.quiz,
+          color: grade['type'] == 'Assignment' ? Colors.blue : Colors.deepPurple,
+          size: 30,
+        ),
+        title: Text(grade['title'], style: TextStyle(fontWeight: FontWeight.w600)),
+        subtitle: Text("📘 ${grade['subject']}"),
+        trailing: Container(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.green.shade100,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            grade['grade'],
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[800]),
+          ),
+        ),
+      ),
     );
   }
 }

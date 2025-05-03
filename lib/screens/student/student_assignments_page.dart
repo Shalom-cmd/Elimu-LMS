@@ -15,8 +15,6 @@ import '../pdf_viewer_page.dart';
 import '../../helpers/hive_helper.dart';
 import '../../models/assignment.dart';
 
-
-
 class StudentAssignmentsPage extends StatefulWidget {
   const StudentAssignmentsPage({Key? key}) : super(key: key);
 
@@ -36,10 +34,13 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
   Map<String, String> selectedFileName = {};
   Map<String, TextEditingController> textControllers = {};
 
+  Set<String> submittingAssignments = {};
+
   @override
   void initState() {
     super.initState();
     fetchStudentInfo();
+    resendPendingSubmissions(); 
   }
 
   Future<void> fetchStudentInfo() async {
@@ -91,6 +92,51 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     }
   }
 
+  Future<void> resendPendingSubmissions() async {
+    final pendingBox = await Hive.openBox('pendingSubmissions');
+    final submissions = pendingBox.values.toList();
+
+    for (var submission in submissions) {
+      if (submission['type'] != 'assignment') continue;
+
+      try {
+        // Upload file if included
+        String? fileUrl;
+        if (submission['fileBytes'] != null && submission['fileName'] != null) {
+          final ref = FirebaseStorage.instance
+              .ref('assignment_submissions/${submission['uid']}/${DateTime.now().millisecondsSinceEpoch}_${submission['fileName']}');
+          final uploadTask = await ref.putData(submission['fileBytes']);
+          fileUrl = await uploadTask.ref.getDownloadURL();
+        }
+
+        await FirebaseFirestore.instance
+            .collection('schools')
+            .doc(submission['schoolDomain'])
+            .collection('classes')
+            .doc(submission['grade'])
+            .collection('assignments')
+            .doc(submission['assignmentId'])
+            .collection('submissions')
+            .doc(submission['uid'])
+            .set({
+              'studentId': submission['uid'],
+              'studentName': submission['studentName'],
+              'textAnswer': submission['textAnswer'],
+              'fileUrl': fileUrl,
+              'submittedAt': FieldValue.serverTimestamp(),
+            });
+
+        // Clean up
+        final key = pendingBox.keys.firstWhere((k) => pendingBox.get(k) == submission);
+        await pendingBox.delete(key);
+        print('✅ Resent offline assignment: ${submission['assignmentId']}');
+
+      } catch (e) {
+        print('❌ Failed to resend assignment submission: $e');
+      }
+    }
+  }
+
   Future<void> openFile(String url) async {
     try {
       final filename = url.split('/').last.split('?').first; 
@@ -119,6 +165,7 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
       print('❌ Error opening file: $e');
     }
   }
+
   Future<void> fetchAssignments() async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -128,7 +175,8 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
           .doc(grade)
           .collection('assignments')
           .orderBy('dueDate')
-          .get();
+          .get(const GetOptions(source: Source.serverAndCache));
+
 
       final Map<String, List<Assignment>> grouped = {};
       List<Assignment> allAssignments = [];
@@ -188,7 +236,6 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     }
   }
 
-
   Future<void> pickFile(String assignmentId) async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -204,99 +251,94 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
     }
   }
 
-  Future<void> submitAssignment(Assignment assignment) async {
-    final assignmentId = assignment.id;
-    final textAnswer = textControllers[assignmentId]?.text.trim() ?? "";
-    final file = selectedFileBytes[assignmentId];
-    final fileName = selectedFileName[assignmentId];
+ Future<void> submitAssignment(Assignment assignment) async {
+  final assignmentId = assignment.id;
 
-    if (textAnswer.isEmpty && file == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Please upload a file or enter a text answer.")),
-      );
-      return;
-    }
+  if (submittingAssignments.contains(assignmentId)) return;
 
-    try {
-      String? fileUrl;
-      if (file != null && fileName != null) {
-        final ref = FirebaseStorage.instance
-            .ref('assignment_submissions/$uid/${DateTime.now().millisecondsSinceEpoch}_$fileName');
-        await ref.putData(file);
-        fileUrl = await ref.getDownloadURL();
-      }
+  setState(() => submittingAssignments.add(assignmentId));
 
-      final submissionData = {
-        'studentId': uid,
-        'studentName': studentName,
-        'textAnswer': textAnswer,
-        'fileUrl': fileUrl,
-        'submittedAt': FieldValue.serverTimestamp(),
-      };
+  final textAnswer = textControllers[assignmentId]?.text.trim() ?? "";
+  final file = selectedFileBytes[assignmentId];
+  final fileName = selectedFileName[assignmentId];
 
-      await FirebaseFirestore.instance
-          .collection('schools')
-          .doc(schoolDomain)
-          .collection('classes')
-          .doc(grade)
-          .collection('assignments')
-          .doc(assignmentId)
-          .collection('submissions')
-          .doc(uid)
-          .set(submissionData);
-
-      setState(() {
-        final subject = assignment.subject ?? 'Uncategorized';
-        groupedAssignments[subject]?.removeWhere((doc) => doc.id == assignmentId);
-
-        if (groupedAssignments[subject]?.isEmpty ?? false) {
-          groupedAssignments.remove(subject);
-        }
-
-        textControllers.remove(assignmentId);
-        selectedFileBytes.remove(assignmentId);
-        selectedFileName.remove(assignmentId);
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Assignment submitted!")),
-      );
-    } catch (e) {
-      print('❌ Assignment submission failed, saving offline: $e');
-
-      final pendingBox = await Hive.openBox('pendingSubmissions');
-
-      await pendingBox.add({
-        'type': 'assignment',
-        'assignmentId': assignmentId,
-        'schoolDomain': schoolDomain,
-        'grade': grade,
-        'uid': uid,
-        'studentName': studentName,
-        'textAnswer': textAnswer,
-        'fileBytes': file,   
-        'fileName': fileName,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-
-      setState(() {
-        final subject = assignment.subject ?? 'Uncategorized';
-        groupedAssignments[subject]?.removeWhere((doc) => doc.id == assignmentId);
-
-        if (groupedAssignments[subject]?.isEmpty ?? false) {
-          groupedAssignments.remove(subject);
-        }
-
-        textControllers.remove(assignmentId);
-        selectedFileBytes.remove(assignmentId);
-        selectedFileName.remove(assignmentId);
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("✅ Saved offline. Will auto-submit when online.")),
-      );
-    }
+  if (textAnswer.isEmpty && file == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Please upload a file or enter a text answer.")),
+    );
+    setState(() => submittingAssignments.remove(assignmentId));
+    return;
   }
+
+  try {
+    String? fileUrl;
+
+    if (file != null && fileName != null) {
+      final ref = FirebaseStorage.instance.ref(
+        'assignment_submissions/$uid/${DateTime.now().millisecondsSinceEpoch}_$fileName',
+      );
+
+      final uploadTask = await ref.putData(file).timeout(Duration(seconds: 10));
+      fileUrl = await uploadTask.ref.getDownloadURL().timeout(Duration(seconds: 10));
+    }
+
+    await FirebaseFirestore.instance
+        .collection('schools')
+        .doc(schoolDomain)
+        .collection('classes')
+        .doc(grade)
+        .collection('assignments')
+        .doc(assignmentId)
+        .collection('submissions')
+        .doc(uid)
+        .set({
+          'studentId': uid,
+          'studentName': studentName,
+          'textAnswer': textAnswer,
+          'fileUrl': fileUrl,
+          'submittedAt': FieldValue.serverTimestamp(),
+        }).timeout(Duration(seconds: 10));
+
+    final submittedBox = await Hive.openBox('submittedAssignmentsBox');
+    await submittedBox.put(assignmentId, true);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("✅ Assignment submitted!")),
+    );
+  } catch (e) {
+    print('❌ Offline submission: $e');
+    final pendingBox = await Hive.openBox('pendingSubmissions');
+    await pendingBox.add({
+      'type': 'assignment',
+      'assignmentId': assignmentId,
+      'schoolDomain': schoolDomain,
+      'grade': grade,
+      'uid': uid,
+      'studentName': studentName,
+      'textAnswer': textAnswer,
+      'fileBytes': file,
+      'fileName': fileName,
+      'timestamp': DateTime.now().toIso8601String(),
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("📥 Saved offline. Will auto-submit when online.")),
+    );
+  } finally {
+    setState(() {
+      final subject = assignment.subject ?? 'Uncategorized';
+      groupedAssignments[subject]?.removeWhere((a) => a.id == assignmentId);
+      if (groupedAssignments[subject]?.isEmpty ?? false) {
+        groupedAssignments.remove(subject);
+      }
+      submittingAssignments.remove(assignmentId);
+      textControllers.remove(assignmentId);
+      selectedFileBytes.remove(assignmentId);
+      selectedFileName.remove(assignmentId);
+    });
+  }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -376,12 +418,14 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
                                   if (selectedFileName.containsKey(id))
                                     Text("📎 Selected: ${selectedFileName[id]}"),
                                   SizedBox(height: 10),
-                                  ElevatedButton.icon(
-                                    onPressed: () => submitAssignment(assignment),
-                                    icon: Icon(Icons.send),
-                                    label: Text("Submit"),
-                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                                  )
+                                  submittingAssignments.contains(id)
+                                    ? Center(child: CircularProgressIndicator())
+                                    : ElevatedButton.icon(
+                                        onPressed: () => submitAssignment(assignment),
+                                        icon: Icon(Icons.send),
+                                        label: Text("Submit"),
+                                        style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                                      )
                                 ],
                               ),
                             ),

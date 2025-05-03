@@ -115,11 +115,11 @@ class _CreateQuizPageState extends State<CreateQuizPage> {
     }
   }
 
-
   void addNewQuestion() {
     setState(() {
       questions.add({
         'question': '',
+        'type': 'mcq', 
         'options': List<String>.filled(4, ''),
         'correct': 0,
       });
@@ -281,27 +281,45 @@ class _CreateQuizPageState extends State<CreateQuizPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text("Question ${i + 1}", style: TextStyle(fontWeight: FontWeight.bold)),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("Question ${i + 1}", style: TextStyle(fontWeight: FontWeight.bold)),
+                                DropdownButton<String>(
+                                  value: questions[i]['type'],
+                                  items: ['mcq', 'text'].map((type) {
+                                    return DropdownMenuItem(value: type, child: Text(type == 'mcq' ? "MCQ" : "Text"));
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      questions[i]['type'] = val!;
+                                    });
+                                  },
+                                )
+                              ],
+                            ),
                             TextField(
                               decoration: InputDecoration(labelText: "Question"),
                               onChanged: (val) => questions[i]['question'] = val,
                               controller: TextEditingController(text: questions[i]['question']),
                             ),
-                            for (int j = 0; j < 4; j++)
-                              ListTile(
-                                title: TextField(
-                                  decoration: InputDecoration(labelText: "Option ${j + 1}"),
-                                  onChanged: (val) => questions[i]['options'][j] = val,
-                                  controller: TextEditingController(text: questions[i]['options'][j]),
+                            if (questions[i]['type'] == 'mcq') ...[
+                              for (int j = 0; j < 4; j++)
+                                ListTile(
+                                  title: TextField(
+                                    decoration: InputDecoration(labelText: "Option ${j + 1}"),
+                                    onChanged: (val) => questions[i]['options'][j] = val,
+                                    controller: TextEditingController(text: questions[i]['options'][j]),
+                                  ),
+                                  leading: Radio<int>(
+                                    value: j,
+                                    groupValue: questions[i]['correct'],
+                                    onChanged: (val) => setState(() {
+                                      questions[i]['correct'] = val!;
+                                    }),
+                                  ),
                                 ),
-                                leading: Radio<int>(
-                                  value: j,
-                                  groupValue: questions[i]['correct'],
-                                  onChanged: (val) => setState(() {
-                                    questions[i]['correct'] = val!;
-                                  }),
-                                ),
-                              ),
+                            ]
                           ],
                         ),
                       ),
