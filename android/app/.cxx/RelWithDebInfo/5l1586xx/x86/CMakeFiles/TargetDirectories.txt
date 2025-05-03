@@ -1,2 +1,0 @@
-C:/Users/smwiti/Documents/elimu-mobile/android/app/.cxx/RelWithDebInfo/5l1586xx/x86/CMakeFiles/edit_cache.dir
-C:/Users/smwiti/Documents/elimu-mobile/android/app/.cxx/RelWithDebInfo/5l1586xx/x86/CMakeFiles/rebuild_cache.dir
