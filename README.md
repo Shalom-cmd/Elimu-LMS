@@ -15,7 +15,7 @@ Please enter the usernames and Passwords exactly as I have them here. I used my 
 ## How to Run the App
 ### Option 1: Use the Prebuilt APK (Recommended for Quick Demo)
 
-Download the elimu.apk file from this repository here: 
+Download the elimu.v3.0.apk file from this repository here: 
 [Download elimu.apk](https://drive.google.com/drive/folders/17aYVBfMJiv_1ZL4bqy1rDeTwUGrhr-eg?usp=sharing)
 
 Open Android Studio.
