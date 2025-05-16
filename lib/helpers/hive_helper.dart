@@ -18,14 +18,19 @@ List<Assignment> loadAssignmentsFromHive() {
 
 Future<void> saveQuizzesToHive(List<Quiz> quizzes) async {
   final box = await Hive.openBox('quizzesBox');
-  await box.put('cachedQuizzes', quizzes.map((q) => q.toMap()).toList());
+  final List<Map<String, dynamic>> quizMaps =
+      quizzes.map((q) => q.toMap()).toList();
+  await box.put('quizzes', quizMaps);
 }
 
 List<Quiz> loadQuizzesFromHive() {
   final box = Hive.box('quizzesBox');
-  final List cached = box.get('cachedQuizzes', defaultValue: []);
-  return cached.map((map) => Quiz.fromMap(Map<String, dynamic>.from(map))).toList();
+  final List cached = box.get('quizzes', defaultValue: []);
+  return cached
+      .map((q) => Quiz.fromMap(Map<String, dynamic>.from(q)))
+      .toList();
 }
+
 
 Future<void> saveResourcesToHive(List<Resource> resources) async {
   final box = await Hive.openBox('resourcesBox');

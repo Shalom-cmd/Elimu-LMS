@@ -165,76 +165,78 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
       print('❌ Error opening file: $e');
     }
   }
+Future<void> fetchAssignments() async {
+  // Eagerly load Hive
+  final cachedAssignments = loadAssignmentsFromHive();
+  final Map<String, List<Assignment>> offlineGrouped = {};
 
-  Future<void> fetchAssignments() async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('schools')
-          .doc(schoolDomain)
-          .collection('classes')
-          .doc(grade)
-          .collection('assignments')
-          .orderBy('dueDate')
-          .get(const GetOptions(source: Source.serverAndCache));
-
-
-      final Map<String, List<Assignment>> grouped = {};
-      List<Assignment> allAssignments = [];
-
-      for (var doc in snap.docs) {
-        final submission = await doc.reference
-            .collection('submissions')
-            .doc(uid)
-            .get();
-
-        if (submission.exists) continue;
-
-        final data = doc.data();
-        final assignment = Assignment(
-          id: doc.id,
-          title: data['title'],
-          subject: data['subject'],
-          dueDate: (data['dueDate'] as Timestamp).toDate().toIso8601String(),
-          fileUrl: data['fileUrl'],
-          description: data['description'],
-          type: data['type'],
-          createdInAppText: data['createdInAppText'],
-        );
-
-        allAssignments.add(assignment);
-
-        final subject = assignment.subject ?? 'Uncategorized';
-        grouped.putIfAbsent(subject, () => []).add(assignment);
-        textControllers[assignment.id] = TextEditingController();
-      }
-
-      await saveAssignmentsToHive(allAssignments);
-      print('💾 Saved ${allAssignments.length} assignments to Hive');
-
-      setState(() {
-        groupedAssignments = grouped;
-        isLoading = false;
-      });
-    } catch (e) {
-      print("🔥 Firestore failed, loading from Hive instead: $e");
-
-      final offlineAssignments = loadAssignmentsFromHive();
-      print('📦 Loaded ${offlineAssignments.length} assignments from Hive');
-
-      final Map<String, List<Assignment>> offlineGrouped = {};
-
-      for (var assignment in offlineAssignments) {
-        final subject = assignment.subject ?? 'Uncategorized';
-        offlineGrouped.putIfAbsent(subject, () => []).add(assignment);
-        textControllers[assignment.id] = TextEditingController();
-      }
-
-      setState(() {
-        groupedAssignments = offlineGrouped;
-        isLoading = false;
-      });
-    }
+  for (var assignment in cachedAssignments) {
+    final subject = assignment.subject ?? 'Uncategorized';
+    offlineGrouped.putIfAbsent(subject, () => []).add(assignment);
+    textControllers[assignment.id] = TextEditingController();
   }
+
+  if (mounted) {
+    setState(() {
+      groupedAssignments = offlineGrouped;
+      isLoading = false; // Show what I already have
+    });
+  }
+
+  // Try Firestore in the background 
+  try {
+    final snap = await FirebaseFirestore.instance
+        .collection('schools')
+        .doc(schoolDomain)
+        .collection('classes')
+        .doc(grade)
+        .collection('assignments')
+        .orderBy('dueDate')
+        .get(const GetOptions(source: Source.serverAndCache));
+
+    final Map<String, List<Assignment>> grouped = {};
+    List<Assignment> allAssignments = [];
+
+    for (var doc in snap.docs) {
+      final submission = await doc.reference
+          .collection('submissions')
+          .doc(uid)
+          .get();
+
+      if (submission.exists) continue;
+
+      final data = doc.data();
+      final assignment = Assignment(
+        id: doc.id,
+        title: data['title'],
+        subject: data['subject'],
+        dueDate: (data['dueDate'] as Timestamp).toDate().toIso8601String(),
+        fileUrl: data['fileUrl'],
+        description: data['description'],
+        type: data['type'],
+        createdInAppText: data['createdInAppText'],
+      );
+
+      allAssignments.add(assignment);
+
+      final subject = assignment.subject ?? 'Uncategorized';
+      grouped.putIfAbsent(subject, () => []).add(assignment);
+      textControllers[assignment.id] = TextEditingController();
+    }
+
+    await saveAssignmentsToHive(allAssignments);
+    print('💾 Saved ${allAssignments.length} assignments to Hive');
+
+    if (!mounted) return;
+    setState(() {
+      groupedAssignments = grouped; 
+    });
+  } catch (e) {
+    print("🔥 Firestore failed, using Hive fallback only: $e");
+  }
+}
+
+  
 
   Future<void> pickFile(String assignmentId) async {
     final result = await FilePicker.platform.pickFiles(
@@ -325,17 +327,18 @@ class _StudentAssignmentsPageState extends State<StudentAssignmentsPage> {
       SnackBar(content: Text("📥 Saved offline. Will auto-submit when online.")),
     );
   } finally {
-    setState(() {
-      final subject = assignment.subject ?? 'Uncategorized';
-      groupedAssignments[subject]?.removeWhere((a) => a.id == assignmentId);
-      if (groupedAssignments[subject]?.isEmpty ?? false) {
-        groupedAssignments.remove(subject);
-      }
-      submittingAssignments.remove(assignmentId);
-      textControllers.remove(assignmentId);
-      selectedFileBytes.remove(assignmentId);
-      selectedFileName.remove(assignmentId);
-    });
+    final subject = assignment.subject ?? 'Uncategorized';
+    groupedAssignments[subject]?.removeWhere((a) => a.id == assignmentId);
+    if (groupedAssignments[subject]?.isEmpty ?? false) {
+      groupedAssignments.remove(subject);
+    }
+    submittingAssignments.remove(assignmentId);
+    textControllers.remove(assignmentId);
+    selectedFileBytes.remove(assignmentId);
+    selectedFileName.remove(assignmentId);
+
+    if (!mounted) return;
+    setState(() {});
   }
 }
 

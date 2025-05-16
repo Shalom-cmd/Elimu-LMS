@@ -40,9 +40,10 @@ class Quiz {
       type: map['type'] ?? 'file',
       fileUrl: map['fileUrl'],
       createdInAppText: map['createdInAppText'],
-      questions: (map['questions'] is List)
-          ? List<Map<String, dynamic>>.from(map['questions'])
-          : [],
+      questions: (map['questions'] as List<dynamic>?)
+              ?.map((q) => Map<String, dynamic>.from(q))
+              .toList() ??
+          [],
       dueDate: map['dueDate'] ?? '',
     );
   }
